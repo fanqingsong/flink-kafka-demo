@@ -40,9 +40,12 @@ public class JoinStreams {
         try (InputStream propsInput =
                      JoinStreams.class.getClassLoader().getResourceAsStream("config.properties")) {
             prop.load(propsInput);
-            return prop;
         } catch (IOException e) {
             e.printStackTrace();
+        }
+        String bootstrap = System.getenv("BOOTSTRAP_SERVERS");
+        if (bootstrap != null && !bootstrap.isBlank()) {
+            prop.setProperty("BOOTSTRAP_SERVERS", bootstrap);
         }
         return prop;
     }

@@ -147,38 +147,29 @@ kafka-console-consumer.sh \
     --bootstrap-server $BOOTSTRAP_SERVERS
 ```
 
-## Docker Stack
+## Docker Compose
 
-Demonstration uses
-Kafka/Flink [Docker Swarm Stack](https://github.com/garystafford/streaming-sales-generator/blob/main/docker-compose.yml)
-from 'Sales Data Generator' project.
+`docker compose up --build -d` starts Kafka 3.7 (KRaft), a sample producer, Flink 1.19.1 JobManager/TaskManager, and submits both jobs. Job dependencies match that Flink version.
 
-See [bitnami/kafka](https://hub.docker.com/r/bitnami/kafka) on Docker Hub for more information about running Kafka
-locally using Docker.
+- Flink UI: <http://localhost:8081>
+- Kafka from the host: `localhost:9092`
+- Inside the Compose network, jobs use `kafka:29092` (`BOOTSTRAP_SERVERS` on the submit containers overrides `config.properties`)
 
 ```shell
-# optional: delete previous stack
-docker stack rm kafka-flink
+docker compose up --build -d
 
-# deploy kafka stack
-docker swarm init
-docker stack deploy kafka-flink --compose-file docker-compose.yml
+# running totals written by org.example.RunningTotals
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --topic demo.running.totals --from-beginning --bootstrap-server localhost:9092
 
-# optional: to exec into Kafka container
-docker exec -it $(docker container ls --filter  name=kafka-flink_kafka --format "{{.ID}}") bash
+# enriched purchases written by org.example.JoinStreams
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --topic demo.purchases.enriched --from-beginning --bootstrap-server localhost:9092
+
+docker compose down
 ```
 
-### Containers
-
-Example containers:
-
-```text
-CONTAINER ID   IMAGE                      PORTS                                    NAMES
-69ad1556eb3a   flink:latest               6123/tcp, 8081/tcp                       kafka-flink_taskmanager.1...
-9f9b8e43eb21   flink:latest               6123/tcp, 8081/tcp                       kafka-flink_jobmanager.1...
-6114dc4a9824   bitnami/kafka:latest       9092/tcp                                 kafka-flink_kafka.1...
-837c0cdd1498   bitnami/zookeeper:latest   2181/tcp, 2888/tcp, 3888/tcp, 8080/tcp   kafka-flink_zookeeper.1...
-```
+The `producer` service writes a small product catalog once, then a purchase every second, so the jobs have a stream to compute. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
 
 ## References
 

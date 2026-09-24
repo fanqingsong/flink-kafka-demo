@@ -1,6 +1,8 @@
 
 buildscript {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -30,18 +32,20 @@ group 'org.example'
 version '1.2.0'
 
 repositories {
+    maven { url 'https://maven.aliyun.com/repository/public' }
     mavenCentral()
 }
 
 dependencies {
 
     annotationProcessor 'org.projectlombok:lombok:1.18.24'
-    compileOnly 'org.apache.flink:flink-streaming-java:1.16.0'
-    compileOnly 'org.apache.flink:flink-core:1.16.0'
-    compileOnly 'org.apache.flink:flink-table-api-java-bridge:1.16.0'
-    compileOnly 'org.apache.flink:flink-table:1.16.0'
+    compileOnly 'org.apache.flink:flink-streaming-java:1.19.1'
+    compileOnly 'org.apache.flink:flink-core:1.19.1'
+    compileOnly 'org.apache.flink:flink-table-api-java-bridge:1.19.1'
+    compileOnly 'org.apache.flink:flink-table-api-java:1.19.1'
     compileOnly 'org.projectlombok:lombok:1.18.24'
-    implementation 'org.apache.flink:flink-connector-kafka:1.16.0'
+    implementation 'org.apache.flink:flink-connector-base:1.19.1'
+    implementation 'org.apache.flink:flink-connector-kafka:3.2.0-1.19'
     implementation 'org.slf4j:slf4j-nop:2.0.3' // prevents runtime warnings...
 
     // test dependencies (TODO: Add unit tests...)
