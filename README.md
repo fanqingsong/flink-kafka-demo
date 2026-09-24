@@ -4,21 +4,95 @@ A small Java demo of streaming sales analytics. Purchases go into Kafka. Two Fli
 
 The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, a one-shot catalog producer, and a web console.
 
+## What you are looking at
+
+The console sends a purchase. Kafka holds it. Flink updates two results, and the console shows both.
+
+```mermaid
+flowchart LR
+  console["Console :8088<br/>send a purchase"] --> purchases["demo.purchases"]
+  producer["producer<br/>product catalog, once"] --> products["demo.products"]
+
+  purchases --> totals["RunningTotals<br/>add up by product"]
+  purchases --> join["JoinStreams<br/>attach product details"]
+  products --> join
+
+  totals --> running["demo.running.totals"]
+  join --> enriched["demo.purchases.enriched"]
+
+  running --> screen["Console<br/>totals and enriched rows"]
+  enriched --> screen
+```
+
 | Job | Reads | Writes |
 | --- | --- | --- |
 | `org.example.RunningTotals` | `demo.purchases` | `demo.running.totals` — transaction count, quantity, and sales per product |
 | `org.example.JoinStreams` | `demo.products`, `demo.purchases` | `demo.purchases.enriched` — each purchase plus product name, category, and cost |
 
+One purchase is handled by both jobs at the same time:
+
+```mermaid
+sequenceDiagram
+  participant Console
+  participant Kafka
+  participant RunningTotals
+  participant JoinStreams
+
+  Console->>Kafka: demo.purchases, SC04, 1 cup, 5.99
+  par both jobs
+    Kafka->>RunningTotals: add this cup to the SC04 total
+    RunningTotals->>Kafka: demo.running.totals
+  and
+    Kafka->>JoinStreams: match SC04 in demo.products
+    JoinStreams->>Kafka: demo.purchases.enriched
+  end
+  Kafka-->>Console: refresh both tables
+```
+
+`RunningTotals` does not scan old orders. It keeps one total per product and adds the new cup to it:
+
+```mermaid
+flowchart LR
+  first["12:58:36<br/>SC04 · 1 cup · 5.99"] --> book["SC04 total in memory"]
+  second["12:58:43<br/>SC04 · 1 cup · 5.99"] --> book
+  book --> now["2 orders<br/>2 cups<br/>11.98"]
+```
+
+| Time | New purchase | SC04 total after this purchase |
+| --- | --- | --- |
+| 12:58:36 | 1 cup, 5.99 | 1 order / 1 cup / 5.99 |
+| 12:58:43 | 1 cup, 5.99 | 2 orders / 2 cups / 11.98 |
+
 ## Learn
 
-Beginner notes in Chinese, with diagrams:
+Longer beginner notes, in Chinese, with more diagrams:
 
 * [统计销量，为什么不直接用数据库？](docs/database-vs-flink.md) — the same sales question, answered with a database query or with this pipeline
 * [Flink 怎么读 Kafka](docs/flink-kafka-topology.md) — how one purchase moves from a topic to a running total
 
 ## Quick start
 
-Requires Docker Compose.
+Requires Docker Compose. One command starts the boxes in the diagram below.
+
+```mermaid
+flowchart TB
+  browser["Browser"]
+
+  browser -->|"localhost:8088"| console["console<br/>send purchases, show results"]
+  browser -->|"localhost:8081"| jm["jobmanager<br/>Flink UI"]
+  browser -->|"localhost:9092"| kafka["kafka"]
+
+  producer["producer<br/>write demo.products once"] --> kafka
+  console --> kafka
+
+  rt["running-totals"] --> jm
+  js["join-streams"] --> jm
+  jm --> tm["taskmanager"]
+  kafka --> rt
+  kafka --> js
+  rt --> kafka
+  js --> kafka
+```
 
 ```shell
 docker compose up --build -d
@@ -62,13 +136,13 @@ Purchase on `demo.purchases`:
 {"transaction_time": "2022-09-13 12:58:36.915834", "transaction_id": "2883033696701592101", "product_id": "SC04", "price": 5.99, "quantity": 1, "is_member": false, "member_discount": 0.0, "add_supplements": false, "supplement_price": 0.0, "total_purchase": 5.99}
 ```
 
-Running total on `demo.running.totals`:
+Running total on `demo.running.totals` after many purchases, not just the two cups above:
 
 ```json
 {"event_time":"2022-09-10T02:44:03.962799Z","product_id":"SC04","transactions":52,"quantities":65,"sales":432.06}
 ```
 
-Enriched purchase on `demo.purchases.enriched`:
+Enriched purchase on `demo.purchases.enriched`. The purchase only carried `product_id`; the name and category came from `demo.products`:
 
 ```json
 {"transaction_time":"2022-09-13 12:50:55.644564","transaction_id":"1142152017802750696","product_id":"CS06","product_category":"Classic Smoothies","product_name":"Blimey Limey","product_size":"24 oz.","product_cogs":1.50,"product_price":4.99,"contains_fruit":true,"contains_veggies":false,"contains_nuts":false,"contains_caffeine":false,"purchase_price":4.99,"purchase_quantity":1,"is_member":false,"member_discount":0.00,"add_supplements":false,"supplement_price":0.00,"total_purchase":4.99}
