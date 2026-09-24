@@ -23,6 +23,15 @@ for topic in demo.products demo.purchases demo.purchases.enriched demo.running.t
     --replication-factor 1
 done
 
+existing=0
+if end=$("${KAFKA_TOPICS%/kafka-topics.sh}/kafka-get-offsets.sh" --bootstrap-server "$BOOTSTRAP" --topic demo.products 2>/dev/null); then
+  existing=$(printf '%s\n' "$end" | awk -F: '{sum += $3} END {print sum + 0}')
+fi
+if [ "$existing" -gt 0 ]; then
+  echo "Product catalog already has ${existing} messages, skip seeding."
+  exit 0
+fi
+
 echo "Publishing product catalog..."
 "$KAFKA_PRODUCER" --bootstrap-server "$BOOTSTRAP" --topic demo.products <<'EOF'
 {"event_time":"2022-09-13 12:00:00.000000","product_id":"CS06","category":"Classic Smoothies","item":"Blimey Limey","size":"24 oz.","cogs":1.50,"price":4.99,"inventory_level":100,"contains_fruit":true,"contains_veggies":false,"contains_nuts":false,"contains_caffeine":false,"propensity_to_buy":1}
@@ -31,18 +40,4 @@ echo "Publishing product catalog..."
 {"event_time":"2022-09-13 12:00:00.000000","product_id":"SC04","category":"Supercharged Smoothies","item":"Health Nut","size":"24 oz.","cogs":2.70,"price":5.99,"inventory_level":70,"contains_fruit":false,"contains_veggies":false,"contains_nuts":true,"contains_caffeine":false,"propensity_to_buy":1}
 EOF
 
-echo "Publishing purchases..."
-products=(CS06 SF05 SF06 SC04)
-prices=(4.99 5.99 5.99 5.99)
-i=0
-while true; do
-  idx=$((i % 4))
-  product_id="${products[$idx]}"
-  price="${prices[$idx]}"
-  ts="$(date -u +"%Y-%m-%d %H:%M:%S.000000")"
-  txn="${i}-$(date +%s)"
-  printf '{"transaction_time":"%s","transaction_id":"%s","product_id":"%s","price":%s,"quantity":1,"is_member":false,"member_discount":0.0,"add_supplements":false,"supplement_price":0.0,"total_purchase":%s}\n' \
-    "$ts" "$txn" "$product_id" "$price" "$price"
-  i=$((i + 1))
-  sleep 1
-done | "$KAFKA_PRODUCER" --bootstrap-server "$BOOTSTRAP" --topic demo.purchases
+echo "Catalog ready. Send purchases from the console at http://localhost:8088"

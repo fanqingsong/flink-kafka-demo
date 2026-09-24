@@ -151,6 +151,7 @@ kafka-console-consumer.sh \
 
 `docker compose up --build -d` starts Kafka 3.7 (KRaft), a sample producer, Flink 1.19.1 JobManager/TaskManager, and submits both jobs. Job dependencies match that Flink version.
 
+- Console: <http://localhost:8088> sends purchases and shows Flink totals
 - Flink UI: <http://localhost:8081>
 - Kafka from the host: `localhost:9092`
 - Inside the Compose network, jobs use `kafka:29092` (`BOOTSTRAP_SERVERS` on the submit containers overrides `config.properties`)
@@ -159,17 +160,17 @@ kafka-console-consumer.sh \
 docker compose up --build -d
 
 # running totals written by org.example.RunningTotals
-docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+docker compose exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
   --topic demo.running.totals --from-beginning --bootstrap-server localhost:9092
 
 # enriched purchases written by org.example.JoinStreams
-docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+docker compose exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
   --topic demo.purchases.enriched --from-beginning --bootstrap-server localhost:9092
 
 docker compose down
 ```
 
-The `producer` service writes a small product catalog once, then a purchase every second, so the jobs have a stream to compute. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
+The `producer` service writes the product catalog once when the topic is empty. Purchases are sent from the console. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
 
 ## References
 
