@@ -10,6 +10,13 @@ using the [Streaming Synthetic Sales Data Generator](https://github.com/garystaf
   Kafka/Flink [Docker Swarm Stack](https://github.com/garystafford/streaming-sales-generator/blob/main/docker-compose.yml)
   from 'Sales Data Generator' project
 
+## Learn
+
+Beginner notes in Chinese, with diagrams:
+
+* [统计销量，为什么不直接用数据库？](docs/database-vs-flink.md) — same sales question, database query versus this streaming pipeline
+* [Flink 怎么读 Kafka](docs/flink-kafka-topology.md) — how one purchase moves from a topic to a running total
+
 * Uber JAR built with Gradle using Amazon Corretto (OpenJDK) version 11 (openjdk version "11.0.16.1" 2022-08-12 LTS)
 
 ## Video Demonstration
