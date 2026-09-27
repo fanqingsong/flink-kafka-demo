@@ -30,7 +30,9 @@ services:
 
   web:
     image: flink-kafka-demo-web
-    build: ./web
+    build:
+      context: .
+      dockerfile: sales-web/Dockerfile
     ports:
       - "8088:8088"
     environment:
@@ -39,7 +41,7 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/api/state', timeout=3)"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/api/state"]
       interval: 5s
       timeout: 5s
       retries: 20

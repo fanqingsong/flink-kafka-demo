@@ -98,7 +98,7 @@ flowchart LR
   totals --> screen["大屏、告警、别的服务<br/>订阅这条结果"]
 ```
 
-代码里就是：每笔购买先记成「1 笔，加上本笔的件数和金额」，再按商品编号分组累加，最后写回 Kafka。对应 `src/main/java/org/example/RunningTotals.java`：
+代码里就是：每笔购买先记成「1 笔，加上本笔的件数和金额」，再按商品编号分组累加，最后写回 Kafka。对应 `flink-jobs/src/main/java/org/example/RunningTotals.java`：
 
 ```java
 DataStream<RunningTotal> runningTotals = purchases

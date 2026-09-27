@@ -2,7 +2,7 @@
 
 A small Java demo of streaming sales analytics. Purchases go into Kafka. Two Flink jobs keep a running sales total per product, and attach product details to each purchase.
 
-The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, and a web app.
+The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, and a Spring Boot web app.
 
 ## Architecture
 
@@ -57,7 +57,7 @@ flowchart TB
 | Piece | Lifetime | What it does |
 | --- | --- | --- |
 | `kafka` | stays up | KRaft broker. Compose uses `kafka:29092`. The host uses `localhost:9092`. |
-| `web` | stays up | Creates the four topics. Writes the catalog to `demo.products` only when that topic is empty. Writes each purchase to `demo.purchases`. Tails that topic plus the two result topics for the page. |
+| `web` | stays up | Spring Boot app. Creates the four topics. Writes the catalog to `demo.products` only when that topic is empty. Writes each purchase to `demo.purchases`. Tails that topic plus the two result topics for the page. |
 | `jobmanager` | stays up | Accepts job submissions. Flink UI on port 8081. |
 | `taskmanager` | stays up | Runs both jobs. Four task slots. |
 | `running-totals` | exits | Submits `org.example.RunningTotals` with `flink run -d`, then exits. Skips the submit when that job name is already running. |
@@ -147,7 +147,7 @@ That starts Kafka, writes the product catalog once when `demo.products` is empty
 - Flink UI: <http://localhost:8081>
 - Kafka from the host: `localhost:9092`
 
-Inside the Compose network, jobs use `kafka:29092`. `BOOTSTRAP_SERVERS` on the job containers overrides `src/main/resources/config.properties`.
+Inside the Compose network, jobs use `kafka:29092`. `BOOTSTRAP_SERVERS` on the job containers overrides `flink-jobs/src/main/resources/config.properties`.
 
 ```shell
 # running totals written by org.example.RunningTotals
@@ -221,13 +221,13 @@ Topics are created by the web app on startup: `demo.products`, `demo.purchases`,
 
 ## Build the jar on the host
 
-Compose builds the uber JAR inside the job image. To build it locally, use JDK 11:
+Compose builds the uber JAR inside the job image. To build it locally, use JDK 17 (the Flink module still targets Java 11):
 
 ```shell
-mvn -B clean package
+mvn -B -pl flink-jobs -am package -DskipTests
 ```
 
-The JAR is `target/flink-kafka-demo-1.2.0-all.jar`. Flink dependencies are `provided` and must match the Flink 1.19.1 cluster.
+The JAR is `flink-jobs/target/flink-kafka-demo-1.2.0-all.jar`. Flink dependencies are `provided` and must match the Flink 1.19.1 cluster.
 
 ## References
 

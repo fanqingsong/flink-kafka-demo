@@ -30,7 +30,7 @@ flowchart TB
   join --> joinBox["信箱 demo.purchases.enriched"]
 ```
 
-订哪个信箱，写在 `src/main/resources/config.properties` 里。换一套 Kafka，改地址和信箱名就行。
+订哪个信箱，写在 `flink-jobs/src/main/resources/config.properties` 里。换一套 Kafka，改地址和信箱名就行。
 
 ## 2. 两套集群各管各的
 
