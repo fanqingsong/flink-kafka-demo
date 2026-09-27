@@ -4,6 +4,71 @@ A small Java demo of streaming sales analytics. Purchases go into Kafka. Two Fli
 
 The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, a one-shot catalog producer, and a web app.
 
+## Architecture
+
+Kafka stores the messages. Flink computes them. The web app is the only long-running client. `producer`, `running-totals`, and `join-streams` start, do one job, and exit. The two analytics programs keep running on the TaskManager after those submit containers are gone.
+
+```mermaid
+flowchart TB
+  browser["Browser"]
+
+  web["web :8088<br/>send a purchase, show both results"]
+  producer["producer<br/>create the four topics, write the catalog once"]
+
+  subgraph kafka["Kafka 3.7 KRaft · volume kafka-data"]
+    direction LR
+    products["demo.products<br/>product catalog"]
+    purchases["demo.purchases<br/>each purchase"]
+    totals["demo.running.totals<br/>sales per product"]
+    enriched["demo.purchases.enriched<br/>purchase plus product"]
+  end
+
+  subgraph flink["Flink 1.19.1"]
+    direction TB
+    submitRt["running-totals<br/>submit, then exit"]
+    submitJs["join-streams<br/>submit, then exit"]
+    jm["JobManager :8081"]
+    tm["TaskManager · 4 slots"]
+    rt["RunningTotals"]
+    js["JoinStreams"]
+  end
+
+  browser -->|"localhost:8088"| web
+  browser -->|"localhost:8081"| jm
+
+  producer -->|"catalog, if the topic is empty"| products
+  web -->|"produce"| purchases
+  purchases -->|"tail"| web
+  totals -->|"tail"| web
+  enriched -->|"tail"| web
+
+  submitRt -->|"flink run -d"| jm
+  submitJs -->|"flink run -d"| jm
+  jm -->|"schedule"| tm
+  tm --> rt
+  tm --> js
+
+  purchases -->|"read"| rt
+  rt -->|"write"| totals
+  products -->|"read"| js
+  purchases -->|"read"| js
+  js -->|"write"| enriched
+```
+
+| Piece | Lifetime | What it does |
+| --- | --- | --- |
+| `kafka` | stays up | KRaft broker. Compose uses `kafka:29092`. The host uses `localhost:9092`. |
+| `producer` | exits | Creates `demo.products`, `demo.purchases`, `demo.purchases.enriched`, and `demo.running.totals`. Writes the catalog only when `demo.products` is empty. |
+| `web` | stays up | Writes each purchase to `demo.purchases`. Tails that topic plus the two result topics for the page. |
+| `jobmanager` | stays up | Accepts job submissions. Flink UI on port 8081. |
+| `taskmanager` | stays up | Runs both jobs. Four task slots. |
+| `running-totals` | exits | Submits `org.example.RunningTotals` with `flink run -d`, then exits. Skips the submit when that job name is already running. |
+| `join-streams` | exits | Submits `org.example.JoinStreams` the same way. |
+| `RunningTotals` | stays up on the TaskManager | Reads `demo.purchases`. Keeps one total per product. Writes `demo.running.totals`. |
+| `JoinStreams` | stays up on the TaskManager | Reads `demo.products` and `demo.purchases`. Writes `demo.purchases.enriched`. |
+
+One purchase is handled by both jobs at the same time. The page refreshes from the two result topics, and also tails `demo.purchases` so the sent row shows up before Flink finishes.
+
 ## What you are looking at
 
 The web app sends a purchase. Kafka holds it. Flink updates two results, and the web app shows both.
@@ -72,27 +137,7 @@ Longer beginner notes, in Chinese, with more diagrams:
 
 ## Quick start
 
-Requires Docker Compose. One command starts the boxes in the diagram below.
-
-```mermaid
-flowchart TB
-  browser["Browser"]
-
-  browser -->|"localhost:8088"| web["web<br/>send purchases, show results"]
-  browser -->|"localhost:8081"| jm["jobmanager<br/>Flink UI"]
-  browser -->|"localhost:9092"| kafka["kafka"]
-
-  producer["producer<br/>write demo.products once"] --> kafka
-  web --> kafka
-
-  rt["running-totals"] --> jm
-  js["join-streams"] --> jm
-  jm --> tm["taskmanager"]
-  kafka --> rt
-  kafka --> js
-  rt --> kafka
-  js --> kafka
-```
+Requires Docker Compose. One command starts every box in the [architecture diagram](#architecture).
 
 ```shell
 docker compose up --build -d
