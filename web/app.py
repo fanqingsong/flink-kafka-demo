@@ -109,7 +109,7 @@ def consume_loop() -> None:
                 TOPIC_TOTALS,
                 TOPIC_ENRICHED,
                 bootstrap_servers=BOOTSTRAP,
-                group_id=f"console-{uuid.uuid4()}",
+                group_id=f"web-{uuid.uuid4()}",
                 auto_offset_reset="earliest",
                 enable_auto_commit=True,
                 value_deserializer=lambda raw: json.loads(raw.decode("utf-8")),

@@ -2,15 +2,15 @@
 
 A small Java demo of streaming sales analytics. Purchases go into Kafka. Two Flink jobs keep a running sales total per product, and attach product details to each purchase.
 
-The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, a one-shot catalog producer, and a web console.
+The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, a one-shot catalog producer, and a web app.
 
 ## What you are looking at
 
-The console sends a purchase. Kafka holds it. Flink updates two results, and the console shows both.
+The web app sends a purchase. Kafka holds it. Flink updates two results, and the web app shows both.
 
 ```mermaid
 flowchart LR
-  console["Console :8088<br/>send a purchase"] --> purchases["demo.purchases"]
+  web["Web :8088<br/>send a purchase"] --> purchases["demo.purchases"]
   producer["producer<br/>product catalog, once"] --> products["demo.products"]
 
   purchases --> totals["RunningTotals<br/>add up by product"]
@@ -20,7 +20,7 @@ flowchart LR
   totals --> running["demo.running.totals"]
   join --> enriched["demo.purchases.enriched"]
 
-  running --> screen["Console<br/>totals and enriched rows"]
+  running --> screen["Web<br/>totals and enriched rows"]
   enriched --> screen
 ```
 
@@ -33,12 +33,12 @@ One purchase is handled by both jobs at the same time:
 
 ```mermaid
 sequenceDiagram
-  participant Console
+  participant Web
   participant Kafka
   participant RunningTotals
   participant JoinStreams
 
-  Console->>Kafka: demo.purchases, SC04, 1 cup, 5.99
+  Web->>Kafka: demo.purchases, SC04, 1 cup, 5.99
   par both jobs
     Kafka->>RunningTotals: add this cup to the SC04 total
     RunningTotals->>Kafka: demo.running.totals
@@ -46,7 +46,7 @@ sequenceDiagram
     Kafka->>JoinStreams: match SC04 in demo.products
     JoinStreams->>Kafka: demo.purchases.enriched
   end
-  Kafka-->>Console: refresh both tables
+  Kafka-->>Web: refresh both tables
 ```
 
 `RunningTotals` does not scan old orders. It keeps one total per product and adds the new cup to it:
@@ -78,12 +78,12 @@ Requires Docker Compose. One command starts the boxes in the diagram below.
 flowchart TB
   browser["Browser"]
 
-  browser -->|"localhost:8088"| console["console<br/>send purchases, show results"]
+  browser -->|"localhost:8088"| web["web<br/>send purchases, show results"]
   browser -->|"localhost:8081"| jm["jobmanager<br/>Flink UI"]
   browser -->|"localhost:9092"| kafka["kafka"]
 
   producer["producer<br/>write demo.products once"] --> kafka
-  console --> kafka
+  web --> kafka
 
   rt["running-totals"] --> jm
   js["join-streams"] --> jm
@@ -100,7 +100,7 @@ docker compose up --build -d
 
 That starts Kafka, writes the product catalog once when `demo.products` is empty, starts Flink, and submits both jobs.
 
-- Console: <http://localhost:8088> — send a purchase and watch the totals
+- Web: <http://localhost:8088> — send a purchase and watch the totals
 - Flink UI: <http://localhost:8081>
 - Kafka from the host: `localhost:9092`
 
@@ -118,7 +118,7 @@ docker compose exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
 docker compose down
 ```
 
-Send purchases from the console. The `producer` service only seeds the catalog. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
+Send purchases from the web app. The `producer` service only seeds the catalog. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
 
 After a code change, rebuild and submit again:
 

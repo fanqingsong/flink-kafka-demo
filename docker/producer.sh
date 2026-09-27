@@ -40,4 +40,4 @@ echo "Publishing product catalog..."
 {"event_time":"2022-09-13 12:00:00.000000","product_id":"SC04","category":"Supercharged Smoothies","item":"Health Nut","size":"24 oz.","cogs":2.70,"price":5.99,"inventory_level":70,"contains_fruit":false,"contains_veggies":false,"contains_nuts":true,"contains_caffeine":false,"propensity_to_buy":1}
 EOF
 
-echo "Catalog ready. Send purchases from the console at http://localhost:8088"
+echo "Catalog ready. Send purchases from the web app at http://localhost:8088"
