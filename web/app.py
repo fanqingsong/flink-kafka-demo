@@ -10,19 +10,87 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from kafka import KafkaConsumer, KafkaProducer
+from kafka import KafkaConsumer, KafkaProducer, TopicPartition
+from kafka.admin import KafkaAdminClient, NewTopic
 from pydantic import BaseModel, Field
 
 BOOTSTRAP = os.environ.get("BOOTSTRAP_SERVERS", "kafka:29092")
+TOPIC_PRODUCTS = "demo.products"
 TOPIC_PURCHASES = "demo.purchases"
 TOPIC_TOTALS = "demo.running.totals"
 TOPIC_ENRICHED = "demo.purchases.enriched"
+TOPICS = (TOPIC_PRODUCTS, TOPIC_PURCHASES, TOPIC_TOTALS, TOPIC_ENRICHED)
 
+CATALOG = [
+    {
+        "event_time": "2022-09-13 12:00:00.000000",
+        "product_id": "CS06",
+        "category": "Classic Smoothies",
+        "item": "Blimey Limey",
+        "size": "24 oz.",
+        "cogs": 1.50,
+        "price": 4.99,
+        "inventory_level": 100,
+        "contains_fruit": True,
+        "contains_veggies": False,
+        "contains_nuts": False,
+        "contains_caffeine": False,
+        "propensity_to_buy": 1,
+    },
+    {
+        "event_time": "2022-09-13 12:00:00.000000",
+        "product_id": "SF05",
+        "category": "Superfoods Smoothies",
+        "item": "Caribbean C-Burst",
+        "size": "24 oz.",
+        "cogs": 2.10,
+        "price": 5.99,
+        "inventory_level": 80,
+        "contains_fruit": True,
+        "contains_veggies": False,
+        "contains_nuts": False,
+        "contains_caffeine": False,
+        "propensity_to_buy": 1,
+    },
+    {
+        "event_time": "2022-09-13 12:00:00.000000",
+        "product_id": "SF06",
+        "category": "Superfoods Smoothies",
+        "item": "Get Up and Goji",
+        "size": "24 oz.",
+        "cogs": 2.10,
+        "price": 5.99,
+        "inventory_level": 90,
+        "contains_fruit": True,
+        "contains_veggies": True,
+        "contains_nuts": False,
+        "contains_caffeine": False,
+        "propensity_to_buy": 1,
+    },
+    {
+        "event_time": "2022-09-13 12:00:00.000000",
+        "product_id": "SC04",
+        "category": "Supercharged Smoothies",
+        "item": "Health Nut",
+        "size": "24 oz.",
+        "cogs": 2.70,
+        "price": 5.99,
+        "inventory_level": 70,
+        "contains_fruit": False,
+        "contains_veggies": False,
+        "contains_nuts": True,
+        "contains_caffeine": False,
+        "propensity_to_buy": 1,
+    },
+]
 PRODUCTS = [
-    {"product_id": "CS06", "item": "Blimey Limey", "category": "Classic Smoothies", "price": "4.99"},
-    {"product_id": "SF05", "item": "Caribbean C-Burst", "category": "Superfoods Smoothies", "price": "5.99"},
-    {"product_id": "SF06", "item": "Get Up and Goji", "category": "Superfoods Smoothies", "price": "5.99"},
-    {"product_id": "SC04", "item": "Health Nut", "category": "Supercharged Smoothies", "price": "5.99"},
+    {
+        "product_id": item["product_id"],
+        "item": item["item"],
+        "category": item["category"],
+        "price": f"{item['price']:.2f}",
+    }
+    for item in CATALOG
 ]
 PRODUCT_BY_ID = {item["product_id"]: item for item in PRODUCTS}
 
@@ -69,6 +137,55 @@ def build_purchase(body: PurchaseRequest) -> dict:
         "total_purchase": money(total),
         "product_name": product["item"],
     }
+
+
+def create_topics() -> None:
+    admin = KafkaAdminClient(
+        bootstrap_servers=BOOTSTRAP,
+        client_id="web-setup",
+        request_timeout_ms=10000,
+    )
+    try:
+        existing = set(admin.list_topics())
+        missing = [
+            NewTopic(name=name, num_partitions=1, replication_factor=1)
+            for name in TOPICS
+            if name not in existing
+        ]
+        if missing:
+            admin.create_topics(new_topics=missing, validate_only=False)
+    finally:
+        admin.close()
+
+
+def seed_catalog_if_empty() -> None:
+    consumer = KafkaConsumer(bootstrap_servers=BOOTSTRAP, enable_auto_commit=False)
+    try:
+        partitions = consumer.partitions_for_topic(TOPIC_PRODUCTS)
+        if not partitions:
+            raise RuntimeError(f"{TOPIC_PRODUCTS} has no partitions yet")
+        topic_partitions = [TopicPartition(TOPIC_PRODUCTS, partition) for partition in partitions]
+        if sum(consumer.end_offsets(topic_partitions).values()) > 0:
+            return
+    finally:
+        consumer.close()
+
+    sender = get_producer()
+    for product in CATALOG:
+        sender.send(TOPIC_PRODUCTS, product).get(timeout=10)
+
+
+def prepare_kafka() -> None:
+    last_error = None
+    for _ in range(30):
+        try:
+            create_topics()
+            seed_catalog_if_empty()
+            return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(2)
+    raise RuntimeError(f"kafka setup failed: {last_error}") from last_error
 
 
 def get_producer() -> KafkaProducer:
@@ -132,6 +249,7 @@ def consume_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    prepare_kafka()
     threading.Thread(target=consume_loop, name="kafka-tail", daemon=True).start()
     yield
 

@@ -2,18 +2,17 @@
 
 A small Java demo of streaming sales analytics. Purchases go into Kafka. Two Flink jobs keep a running sales total per product, and attach product details to each purchase.
 
-The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, a one-shot catalog producer, and a web app.
+The product catalog follows the [Streaming Synthetic Sales Data Generator](https://github.com/garystafford/streaming-sales-generator). This repository runs the jobs with its own Docker Compose stack: Kafka 3.7 (KRaft), Flink 1.19.1, and a web app.
 
 ## Architecture
 
-Kafka stores the messages. Flink computes them. The web app is the only long-running client. `producer`, `running-totals`, and `join-streams` start, do one job, and exit. The two analytics programs keep running on the TaskManager after those submit containers are gone.
+Kafka stores the messages. Flink computes them. The web app is the only long-running client. `running-totals` and `join-streams` start, do one job, and exit. The two analytics programs keep running on the TaskManager after those submit containers are gone.
 
 ```mermaid
 flowchart TB
   browser["Browser"]
 
-  web["web :8088<br/>send a purchase, show both results"]
-  producer["producer<br/>create the four topics, write the catalog once"]
+  web["web :8088<br/>create topics, write the catalog once,<br/>send a purchase, show both results"]
 
   subgraph kafka["Kafka 3.7 KRaft · volume kafka-data"]
     direction LR
@@ -36,8 +35,8 @@ flowchart TB
   browser -->|"localhost:8088"| web
   browser -->|"localhost:8081"| jm
 
-  producer -->|"catalog, if the topic is empty"| products
-  web -->|"produce"| purchases
+  web -->|"catalog, if the topic is empty"| products
+  web -->|"purchases"| purchases
   purchases -->|"tail"| web
   totals -->|"tail"| web
   enriched -->|"tail"| web
@@ -58,8 +57,7 @@ flowchart TB
 | Piece | Lifetime | What it does |
 | --- | --- | --- |
 | `kafka` | stays up | KRaft broker. Compose uses `kafka:29092`. The host uses `localhost:9092`. |
-| `producer` | exits | Creates `demo.products`, `demo.purchases`, `demo.purchases.enriched`, and `demo.running.totals`. Writes the catalog only when `demo.products` is empty. |
-| `web` | stays up | Writes each purchase to `demo.purchases`. Tails that topic plus the two result topics for the page. |
+| `web` | stays up | Creates the four topics. Writes the catalog to `demo.products` only when that topic is empty. Writes each purchase to `demo.purchases`. Tails that topic plus the two result topics for the page. |
 | `jobmanager` | stays up | Accepts job submissions. Flink UI on port 8081. |
 | `taskmanager` | stays up | Runs both jobs. Four task slots. |
 | `running-totals` | exits | Submits `org.example.RunningTotals` with `flink run -d`, then exits. Skips the submit when that job name is already running. |
@@ -75,8 +73,8 @@ The web app sends a purchase. Kafka holds it. Flink updates two results, and the
 
 ```mermaid
 flowchart LR
-  web["Web :8088<br/>send a purchase"] --> purchases["demo.purchases"]
-  producer["producer<br/>product catalog, once"] --> products["demo.products"]
+  web["Web :8088<br/>catalog once, then each purchase"] --> purchases["demo.purchases"]
+  web --> products["demo.products"]
 
   purchases --> totals["RunningTotals<br/>add up by product"]
   purchases --> join["JoinStreams<br/>attach product details"]
@@ -163,7 +161,7 @@ docker compose exec kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
 docker compose down
 ```
 
-Send purchases from the web app. The `producer` service only seeds the catalog. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
+Send purchases from the web app. The web app seeds the catalog when `demo.products` is empty. Point `BOOTSTRAP_SERVERS` at another broker if you want the same jobs to read an existing Kafka cluster.
 
 After a code change, rebuild and submit again:
 
@@ -219,7 +217,7 @@ kafka-console-consumer.sh \
   --bootstrap-server $BOOTSTRAP_SERVERS
 ```
 
-Topics are created by the producer on startup: `demo.products`, `demo.purchases`, `demo.purchases.enriched`, `demo.running.totals`.
+Topics are created by the web app on startup: `demo.products`, `demo.purchases`, `demo.purchases.enriched`, `demo.running.totals`.
 
 ## Build the jar on the host
 
