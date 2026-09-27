@@ -181,10 +181,10 @@ Topics are created by the producer on startup: `demo.products`, `demo.purchases`
 Compose builds the uber JAR inside the job image. To build it locally, use JDK 11:
 
 ```shell
-./gradlew clean shadowJar
+mvn -B clean package
 ```
 
-The JAR is `build/libs/flink-kafka-demo-1.2.0-all.jar`. Flink dependencies are `compileOnly` and must match the Flink 1.19.1 cluster.
+The JAR is `target/flink-kafka-demo-1.2.0-all.jar`. Flink dependencies are `provided` and must match the Flink 1.19.1 cluster.
 
 ## References
 
