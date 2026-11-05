@@ -28,7 +28,31 @@ public class KafkaSetup {
         return topic(topics.enriched());
     }
 
+    @Bean
+    public NewTopic eventsRawTopic(TopicNames topics) {
+        return eventTopic(topics.eventsRaw());
+    }
+
+    @Bean
+    public NewTopic eventsValidTopic(TopicNames topics) {
+        return eventTopic(topics.eventsValid());
+    }
+
+    @Bean
+    public NewTopic eventsDlqTopic(TopicNames topics) {
+        return eventTopic(topics.eventsDlq());
+    }
+
+    @Bean
+    public NewTopic metricsTopic(TopicNames topics) {
+        return eventTopic(topics.metrics());
+    }
+
     private static NewTopic topic(String name) {
         return TopicBuilder.name(name).partitions(1).replicas(1).build();
+    }
+
+    private static NewTopic eventTopic(String name) {
+        return TopicBuilder.name(name).partitions(4).replicas(1).build();
     }
 }

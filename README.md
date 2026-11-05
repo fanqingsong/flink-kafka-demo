@@ -144,8 +144,13 @@ docker compose up --build -d
 That starts Kafka, writes the product catalog once when `demo.products` is empty, starts Flink, and submits both jobs.
 
 - Web: <http://localhost:8088> — send a purchase and watch the totals
+- A/B demo: <http://localhost:8088/ab-demo.html> — stable assignment and tracked conversion
+- A/B dashboard: <http://localhost:8088/ab-dashboard.html> — experiments, recent events, and metrics
 - Flink UI: <http://localhost:8081>
 - Kafka from the host: `localhost:9092`
+
+The Compose stack also starts PostgreSQL for experiment configuration and ClickHouse for event
+analytics. See [埋点与 A/B 测试 MVP](docs/ab-testing-mvp.md) for the SDK, API, and metric definitions.
 
 Inside the Compose network, jobs use `kafka:29092`. `BOOTSTRAP_SERVERS` on the job containers overrides `flink-jobs/src/main/resources/config.properties`.
 

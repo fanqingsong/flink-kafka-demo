@@ -1,11 +1,12 @@
 package org.example.web;
 
+import org.example.web.analytics.ClickHouseProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties(TopicNames.class)
+@EnableConfigurationProperties({TopicNames.class, ClickHouseProperties.class})
 public class SalesWebApplication {
 
     public static void main(String[] args) {

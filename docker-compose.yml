@@ -1,4 +1,42 @@
 services:
+  postgres:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_DB: ab_testing
+      POSTGRES_USER: ab_user
+      POSTGRES_PASSWORD: ab_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ab_user -d ab_testing"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  clickhouse:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/clickhouse/clickhouse-server:24.8
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: analytics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ab_password
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
   kafka:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/bitnami/kafka:3.7.0
     hostname: kafka
@@ -17,6 +55,7 @@ services:
       KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_CFG_TRANSACTION_MAX_TIMEOUT_MS: 7200000
       KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: 1
       KAFKA_CFG_MIN_INSYNC_REPLICAS: 1
     volumes:
@@ -37,19 +76,38 @@ services:
       - "8088:8088"
     environment:
       BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/ab_testing
+      POSTGRES_USER: ab_user
+      POSTGRES_PASSWORD: ab_password
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/analytics
+      CLICKHOUSE_PASSWORD: ab_password
     depends_on:
       kafka:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/api/state"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/actuator/health"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 15s
     restart: unless-stopped
 
+  checkpoint-init:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/flink:1.19.1-scala_2.12-java11
+    user: root
+    entrypoint: ["bash", "-c"]
+    command: ["chown -R flink:flink /opt/flink/checkpoints"]
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
+    restart: "no"
+
   jobmanager:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/flink:1.19.1-scala_2.12-java11
+    user: root
     ports:
       - "8081:8081"
     command: jobmanager
@@ -57,9 +115,16 @@ services:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
         parallelism.default: 1
+        execution.checkpointing.interval: 30s
+        execution.checkpointing.mode: EXACTLY_ONCE
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
     depends_on:
       kafka:
         condition: service_healthy
+      checkpoint-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo >/dev/tcp/127.0.0.1/8081'"]
       interval: 5s
@@ -69,12 +134,18 @@ services:
 
   taskmanager:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/flink:1.19.1-scala_2.12-java11
+    user: root
     command: taskmanager
     environment:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
         parallelism.default: 1
+        execution.checkpointing.interval: 30s
+        execution.checkpointing.mode: EXACTLY_ONCE
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
     depends_on:
       jobmanager:
         condition: service_healthy
@@ -113,5 +184,27 @@ services:
         condition: service_started
     restart: "no"
 
+  event-analytics:
+    image: flink-kafka-demo-job
+    build: .
+    command: ["org.example.ab.EventAnalyticsJob"]
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      jobmanager:
+        condition: service_healthy
+      taskmanager:
+        condition: service_started
+    restart: "no"
+
 volumes:
   kafka-data:
+  postgres-data:
+  clickhouse-data:
+  flink-checkpoints:

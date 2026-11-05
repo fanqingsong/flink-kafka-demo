@@ -8,7 +8,8 @@ COPY pom.xml .
 COPY flink-jobs/pom.xml flink-jobs/pom.xml
 COPY sales-web/pom.xml sales-web/pom.xml
 COPY sales-web/src sales-web/src
-RUN mvn -B -pl sales-web -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn -B -pl sales-web -am package -DskipTests
 
 FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/eclipse-temurin:17-jre
 RUN apt-get update \

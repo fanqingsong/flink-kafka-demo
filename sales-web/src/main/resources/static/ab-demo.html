@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A/B 测试演示</title>
+  <style>
+    body { margin: 0; background: #f3efe6; color: #1d1a16; font-family: "Segoe UI", "PingFang SC", sans-serif; }
+    main { width: min(720px, calc(100% - 32px)); margin: 40px auto; }
+    .card { background: #fffdf9; border: 1px solid #e2d9cc; border-radius: 16px; padding: 24px; }
+    h1 { margin-top: 0; }
+    p { color: #6d655c; line-height: 1.6; }
+    .product { margin: 24px 0; padding: 20px; background: #f8f5ef; border-radius: 12px; }
+    button { border: 0; border-radius: 9px; padding: 11px 16px; color: white; cursor: pointer; font: inherit; }
+    button.secondary { background: #6d655c; margin-left: 8px; }
+    code { background: #efe8dc; padding: 2px 5px; border-radius: 4px; }
+    #status { min-height: 24px; margin-top: 18px; }
+    nav { margin-bottom: 16px; display: flex; gap: 14px; }
+    a { color: #0d6b58; }
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="/">销售 Demo</a><a href="/ab-dashboard.html">实验 Dashboard</a></nav>
+  <div class="card">
+    <h1>A/B 测试演示</h1>
+    <p>当前用户：<code id="user">加载中</code>，版本：<code id="variant">分流中</code></p>
+    <div class="product">
+      <h2>流式数据课程</h2>
+      <p>价格 ¥99。按钮文案和颜色由实验版本 payload 决定。</p>
+      <button id="buy" disabled>加载实验</button>
+      <button id="reset" class="secondary">换一个用户</button>
+    </div>
+    <p id="status"></p>
+  </div>
+</main>
+<script src="/sdk/ab-sdk.js"></script>
+<script>
+  const experimentKey = "checkout-button";
+  const buy = document.querySelector("#buy");
+  const status = document.querySelector("#status");
+
+  async function boot() {
+    try {
+      AbSdk.init({});
+      document.querySelector("#user").textContent = AbSdk.userId;
+      const assignment = await AbSdk.getVariant(experimentKey);
+      if (!assignment.in_experiment) {
+        document.querySelector("#variant").textContent = "未进入实验";
+        status.textContent = "该用户未命中实验流量。";
+        return;
+      }
+      document.querySelector("#variant").textContent = assignment.variant_key;
+      buy.textContent = assignment.payload.button_text || "购买";
+      buy.style.background = assignment.payload.button_color || "#0d6b58";
+      buy.disabled = false;
+      status.textContent = "曝光事件已发送。";
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  }
+
+  buy.addEventListener("click", async () => {
+    buy.disabled = true;
+    try {
+      await AbSdk.track("click", { target: "buy_button" }, experimentKey);
+      await AbSdk.track("purchase", { amount: 99, product_id: "course-001" }, experimentKey);
+      status.textContent = "点击和购买事件已发送，稍后可在 Dashboard 查看。";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      buy.disabled = false;
+    }
+  });
+
+  document.querySelector("#reset").addEventListener("click", () => {
+    localStorage.removeItem("ab_user_id");
+    sessionStorage.clear();
+    location.reload();
+  });
+
+  boot();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -48,6 +49,13 @@ class PurchasePipelineTest {
             .waitingFor(Wait.forLogMessage(".*Kafka Server started.*", 1)
                     .withStartupTimeout(Duration.ofMinutes(2)));
 
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES =
+            new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+                    .withDatabaseName("ab_testing")
+                    .withUsername("ab_user")
+                    .withPassword("ab_password");
+
     static {
         KAFKA.setPortBindings(List.of(KAFKA_PORT + ":9092"));
         KAFKA.start();
@@ -59,6 +67,9 @@ class PurchasePipelineTest {
     @DynamicPropertySource
     static void kafka(DynamicPropertyRegistry registry) {
         registry.add("spring.kafka.bootstrap-servers", () -> "127.0.0.1:" + KAFKA_PORT);
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
     }
 
     @Test

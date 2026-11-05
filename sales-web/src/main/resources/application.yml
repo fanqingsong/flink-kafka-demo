@@ -2,6 +2,12 @@ server:
   port: 8088
 
 spring:
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/ab_testing}
+    username: ${POSTGRES_USER:ab_user}
+    password: ${POSTGRES_PASSWORD:ab_password}
+  flyway:
+    enabled: true
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:
@@ -22,8 +28,25 @@ spring:
         request.timeout.ms: 10000
 
 app:
+  clickhouse:
+    url: ${CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/analytics}
+    username: ${CLICKHOUSE_USER:default}
+    password: ${CLICKHOUSE_PASSWORD:ab_password}
   topics:
     products: demo.products
     purchases: demo.purchases
     totals: demo.running.totals
     enriched: demo.purchases.enriched
+    events-raw: ab.events.raw
+    events-valid: ab.events.valid
+    events-dlq: ab.events.dlq
+    metrics: ab.metrics.1m
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

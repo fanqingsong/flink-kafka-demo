@@ -5,7 +5,8 @@ COPY pom.xml .
 COPY flink-jobs/pom.xml flink-jobs/pom.xml
 COPY flink-jobs/src flink-jobs/src
 COPY sales-web/pom.xml sales-web/pom.xml
-RUN mvn -B -pl flink-jobs -am package -DskipTests
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn -B -pl flink-jobs -am package -DskipTests
 
 FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/flink:1.19.1-scala_2.12-java11
 USER root
