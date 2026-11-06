@@ -7,12 +7,19 @@
                            PostgreSQL 保存实验配置
 ```
 
+字段如何变化、Flink 如何去重和归因、ClickHouse 如何建表，可先看
+[数据模型与端到端数据流](data-model-and-flow.md)。
+
 ## 启动
 
 ```shell
 docker compose up --build -d
 docker compose ps
 ```
+
+Compose 会先启动 PostgreSQL、Kafka 和 ClickHouse，再启动 Web 与 Flink 集群。
+`event-analytics` 容器等待 Web、ClickHouse 和 Flink 就绪后提交
+`Flink AB Event Analytics` 作业，提交完成后退出；作业继续在 TaskManager 中运行。
 
 入口：
 
@@ -27,7 +34,8 @@ docker compose ps
 - ClickHouse HTTP：`localhost:8123`
 - ClickHouse Native：`localhost:9000`
 
-首次启动时 Flyway 会创建实验表并写入 `checkout-button` 50/50 演示实验。
+首次启动时 Flyway 会创建实验表并写入 `checkout-button` 演示实验。
+该实验 `traffic_percent=100`，即全部用户进入实验；两个版本的 `weight` 各为 50。
 
 ## JS SDK
 
@@ -76,6 +84,9 @@ curl -X POST http://localhost:8088/api/events \
 ```
 
 `POST /api/events` 也接受最多 100 条事件组成的 JSON 数组。
+服务端会校验实验正在运行且版本属于该实验，并补充 `received_at` 后写入
+`ab.events.raw`。如果绕过 API 直接向 raw topic 写数据，也必须提供 ISO-8601 格式的
+`received_at`，否则事件会进入 DLQ。
 
 ## 数据口径
 
@@ -86,7 +97,17 @@ curl -X POST http://localhost:8088/api/events \
 - 事件时间：允许 30 秒乱序；分钟指标使用事件时间滚动窗口。
 - CTR：已归因点击 UV / 曝光 UV。
 - 转化率：已归因购买 UV / 曝光 UV。
+- 订单数：已归因购买事件条数。
 - GMV：已归因购买事件 `properties.amount` 之和。
+
+这里有两套不同粒度的指标：
+
+- `analytics.ab_metrics_1m` 中的 `exposures`、`clicks`、`purchases` 是一分钟窗口内的**事件条数**；
+- Dashboard API 不读取分钟表，而是从 `analytics.ab_events FINAL` 计算曝光、点击和购买**用户数**，再计算 CTR 与转化率。
+
+因此分钟表中的 `clicks` 不能直接与 Dashboard 的“点击用户数”比较。A/B Flink
+作业每 30 秒 checkpoint，写 Kafka 的 valid、DLQ 和 metrics sink 使用
+`EXACTLY_ONCE`。
 
 ## Topic
 
@@ -96,6 +117,9 @@ ab.events.valid
 ab.events.dlq
 ab.metrics.1m
 ```
+
+四个 A/B topic 均为 4 个分区。`ab.events.raw` 使用 `user_id` 作为 Kafka key，
+保证同一用户的事件进入同一分区；Flink 后续仍会按处理键重新分区。
 
 查看消息：
 
