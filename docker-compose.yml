@@ -1,42 +1,4 @@
 services:
-  postgres:
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres:16-alpine
-    environment:
-      POSTGRES_DB: ab_testing
-      POSTGRES_USER: ab_user
-      POSTGRES_PASSWORD: ab_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ab_user -d ab_testing"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  clickhouse:
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/clickhouse/clickhouse-server:24.8
-    ports:
-      - "8123:8123"
-      - "9000:9000"
-    environment:
-      CLICKHOUSE_DB: analytics
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: ab_password
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
-      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
-    depends_on:
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-
   kafka:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/bitnami/kafka:3.7.0
     hostname: kafka
@@ -76,17 +38,8 @@ services:
       - "8088:8088"
     environment:
       BOOTSTRAP_SERVERS: kafka:29092
-      POSTGRES_URL: jdbc:postgresql://postgres:5432/ab_testing
-      POSTGRES_USER: ab_user
-      POSTGRES_PASSWORD: ab_password
-      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/analytics
-      CLICKHOUSE_PASSWORD: ab_password
     depends_on:
       kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      clickhouse:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8088/actuator/health"]
@@ -184,27 +137,6 @@ services:
         condition: service_started
     restart: "no"
 
-  event-analytics:
-    image: flink-kafka-demo-job
-    build: .
-    command: ["org.example.ab.EventAnalyticsJob"]
-    environment:
-      BOOTSTRAP_SERVERS: kafka:29092
-    depends_on:
-      kafka:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-      clickhouse:
-        condition: service_healthy
-      jobmanager:
-        condition: service_healthy
-      taskmanager:
-        condition: service_started
-    restart: "no"
-
 volumes:
   kafka-data:
-  postgres-data:
-  clickhouse-data:
   flink-checkpoints:
